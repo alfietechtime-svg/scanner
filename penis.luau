@@ -1,5 +1,6 @@
 -- Ghost Notifier Scanner - WebSocket (Local) + Discord Webhooks
 -- WebSocket: ws://localhost:8080
+-- FIXED: Proper LocalPlayer handling
 
 local WS_URL = "ws://localhost:8080"  -- Local WebSocket
 
@@ -7,7 +8,19 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local Workspace = game:GetService("Workspace")
+
+-- =============================================
+-- FIX: Wait for LocalPlayer to exist
+-- =============================================
 local player = Players.LocalPlayer
+if not player then
+    print("[WAIT] Waiting for LocalPlayer...")
+    player = Players:WaitForChild("LocalPlayer", 10)
+    if not player then
+        error("LocalPlayer not found after 10 seconds")
+    end
+end
+
 local BOT_USERNAME = player.Name
 local PLACE_ID = game.PlaceId
 local JOB_ID = game.JobId
@@ -132,6 +145,11 @@ local function sendToDiscord(foundTargets, allBrainrotsInServer, playerCount, pl
         return
     end
 
+    if #foundTargets == 0 then
+        print("[!] No targets found to send")
+        return
+    end
+
     local best = foundTargets[1]
     for _, t in ipairs(foundTargets) do
         if t.gen > best.gen then best = t end
@@ -223,10 +241,15 @@ end
 -- =============================================
 local function disableRendering()
     pcall(function()
-        Workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
-        Workspace.CurrentCamera.CFrame = CFrame.new(1e9, 1e9, 1e9)
-        game:GetService("Lighting").Brightness = 0
-        game:GetService("Lighting").GlobalShadows = false
+        if Workspace and Workspace.CurrentCamera then
+            Workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
+            Workspace.CurrentCamera.CFrame = CFrame.new(1e9, 1e9, 1e9)
+        end
+        local lighting = game:GetService("Lighting")
+        if lighting then
+            lighting.Brightness = 0
+            lighting.GlobalShadows = false
+        end
         Workspace.StreamingEnabled = true
         Workspace.StreamingTargetRadius = 0
         local pg = Players.LocalPlayer:FindFirstChild("PlayerGui")
@@ -296,6 +319,10 @@ local sentCache = {}
 local function sendToWebSocket(foundTargets, plotName, allBrainrotsInServer, playerCount, playerStr)
     if not wsConnection then
         print("[WS] Not connected, can't send")
+        return
+    end
+    
+    if #foundTargets == 0 then
         return
     end
     
